@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# codex-ssh-eg-managed
+set -euo pipefail
+
+config_file="${CODEX_SSH_EG_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/codex-ssh-eg/config}"
+[ -r "$config_file" ] || { echo "Missing config: run install.sh first." >&2; exit 1; }
+# shellcheck disable=SC1090
+. "$config_file"
+
+"$HOME/.local/bin/codex-ssh-eg-ensure-proxy"
+PYTHONPATH="$CODEX_SSH_EG_DATA_DIR" exec "$PYTHON_BIN" -m codex_ssh_eg.verify \
+  --socks-host "$SOCKS_HOST" \
+  --socks-port "$SOCKS_PORT" \
+  --http-host "$HTTP_PROXY_HOST" \
+  --http-port "$HTTP_PROXY_PORT"

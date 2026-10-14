@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# codex-ssh-eg-managed
+set -euo pipefail
+
+config_file="${CODEX_SSH_EG_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/codex-ssh-eg/config}"
+[ -r "$config_file" ] || { echo "Missing config: run install.sh first." >&2; exit 1; }
+# shellcheck disable=SC1090
+. "$config_file"
+
+"$HOME/.local/bin/codex-ssh-eg-ensure-proxy"
+proxy_url="http://$HTTP_PROXY_HOST:$HTTP_PROXY_PORT"
+export HTTP_PROXY="$proxy_url"
+export HTTPS_PROXY="$proxy_url"
+export ALL_PROXY="$proxy_url"
+export NO_PROXY="localhost,127.0.0.1,::1${NO_PROXY:+,$NO_PROXY}"
+export http_proxy="$HTTP_PROXY"
+export https_proxy="$HTTPS_PROXY"
+export all_proxy="$ALL_PROXY"
+export no_proxy="$NO_PROXY"
+
+exec "$CODEX_REAL_BIN" "$@"

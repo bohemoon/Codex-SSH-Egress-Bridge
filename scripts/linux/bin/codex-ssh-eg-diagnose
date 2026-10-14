@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# codex-ssh-eg-managed
+set -u
+
+config_file="${CODEX_SSH_EG_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/codex-ssh-eg/config}"
+[ -r "$config_file" ] || { echo "Missing config: run install.sh first." >&2; exit 1; }
+# shellcheck disable=SC1090
+. "$config_file"
+
+echo "SOCKS5_LAYER"
+"$PYTHON_BIN" - "$SOCKS_HOST" "$SOCKS_PORT" <<'PY'
+import socket
+import sys
+
+try:
+    sock = socket.create_connection((sys.argv[1], int(sys.argv[2])), timeout=3)
+    sock.sendall(b"\x05\x01\x00")
+    print("greeting=" + repr(sock.recv(2)))
+    sock.close()
+except Exception as exc:
+    print(f"error={type(exc).__name__}: {exc}")
+PY
+
+echo "HTTP_ADAPTER_LAYER"
+if "$PYTHON_BIN" - "$HTTP_PROXY_HOST" "$HTTP_PROXY_PORT" <<'PY'
+import socket
+import sys
+
+sock = socket.socket()
+sock.settimeout(1)
+result = sock.connect_ex((sys.argv[1], int(sys.argv[2])))
+sock.close()
+raise SystemExit(0 if result == 0 else 1)
+PY
+then
+  echo "listener=reachable"
+else
+  echo "listener=unreachable"
+fi
+
+echo "CODEX_LAUNCHER"
+if [ -x "$CODEX_REAL_BIN" ]; then
+  echo "real_binary=executable"
+else
+  echo "real_binary=missing"
+fi
+if [ -x "$HOME/.local/bin/codex-ssh-eg" ]; then
+  echo "bridge_launcher=executable"
+else
+  echo "bridge_launcher=missing"
+fi
+
+echo "APP_SERVER_PROCESSES"
+found=0
+for pid in $(pgrep -u "$USER" -f 'app-server' 2>/dev/null || true); do
+  [ -r "/proc/$pid/cmdline" ] || continue
+  cmdline="$(tr '\0' ' ' <"/proc/$pid/cmdline")"
+  case "$cmdline" in
+    *app-server*) ;;
+    *) continue ;;
+  esac
+  found=1
+  ppid="$(awk '/^PPid:/ { print $2 }' "/proc/$pid/status" 2>/dev/null)"
+  proxy_count="$(tr '\0' '\n' <"/proc/$pid/environ" 2>/dev/null \
+    | grep -Ec '^(HTTP_PROXY|HTTPS_PROXY|ALL_PROXY|NO_PROXY)=' || true)"
+  role="app-server"
+  case "$cmdline" in
+    *features.code_mode_host=true*) role="code-mode-host" ;;
+    *'app-server proxy'*) role="proxy-launcher" ;;
+  esac
+  printf 'pid=%s ppid=%s role=%s proxy_vars=%s/4\n' \
+    "$pid" "${ppid:-unknown}" "$role" "$proxy_count"
+done
+[ "$found" -eq 1 ] || echo "none"
+
+echo "CONTROL_SOCKET"
+if [ -S "$HOME/.codex/app-server-control/app-server-control.sock" ]; then
+  echo "present=yes"
+else
+  echo "present=no"
+fi
+
+echo "LOGS"
+echo "adapter_log=$CODEX_SSH_EG_STATE_DIR/proxy.log"
+echo "Review logs locally before sharing; paths and timestamps can identify a machine."

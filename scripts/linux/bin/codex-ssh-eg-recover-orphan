@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# codex-ssh-eg-managed
+set -euo pipefail
+
+target=""
+for pid in $(pgrep -u "$USER" -f 'features.code_mode_host=true app-server --listen unix://' || true); do
+  [ -r "/proc/$pid/cmdline" ] || continue
+  cmdline="$(tr '\0' ' ' <"/proc/$pid/cmdline")"
+  ppid="$(awk '/^PPid:/ { print $2 }' "/proc/$pid/status")"
+  case "$cmdline" in
+    node*"features.code_mode_host=true app-server --listen unix://"*)
+      if [ "$ppid" = "1" ]; then
+        target="$pid"
+        break
+      fi
+      ;;
+  esac
+done
+
+if [ -z "$target" ]; then
+  echo "No matching parentless code-mode host found."
+  exit 0
+fi
+
+if tr '\0' '\n' <"/proc/$target/environ" \
+    | grep -Eq '^(HTTP_PROXY|HTTPS_PROXY|ALL_PROXY)='; then
+  echo "Refusing to stop pid=$target because it has proxy variables." >&2
+  exit 1
+fi
+
+echo "Stopping unproxied parentless code-mode host pid=$target"
+kill -TERM "$target"

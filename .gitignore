@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.log
+*.pid
+.coverage
+.pytest_cache/
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+local.env
+*.local

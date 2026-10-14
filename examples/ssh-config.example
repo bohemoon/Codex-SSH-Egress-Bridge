@@ -1,0 +1,10 @@
+# Keep the real SSH config private. Replace every placeholder locally.
+Host example-remote
+    HostName remote.example.com
+    User remote-user
+    IdentityFile ~/.ssh/id_ed25519
+    ServerAliveInterval 30
+    ServerAliveCountMax 3
+
+# The PowerShell launcher supplies the remote dynamic forward at runtime:
+#   -R 127.0.0.1:10809

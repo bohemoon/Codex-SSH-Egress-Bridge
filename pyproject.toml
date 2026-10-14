@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codex-ssh-egress-bridge"
+version = "0.1.0"
+description = "Loopback-only HTTP-to-SOCKS bridge for remote Codex over SSH"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "Codex SSH Egress Bridge contributors" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Topic :: Internet :: Proxy Servers",
+]
+
+[project.scripts]
+codex-ssh-eg-proxy = "codex_ssh_eg.proxy:main"
+codex-ssh-eg-verify = "codex_ssh_eg.verify:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]

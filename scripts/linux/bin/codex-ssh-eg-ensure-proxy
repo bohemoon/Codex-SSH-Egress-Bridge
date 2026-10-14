@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# codex-ssh-eg-managed
+set -euo pipefail
+
+config_file="${CODEX_SSH_EG_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/codex-ssh-eg/config}"
+[ -r "$config_file" ] || { echo "Missing config: run install.sh first." >&2; exit 1; }
+# shellcheck disable=SC1090
+. "$config_file"
+
+is_listening() {
+  "$PYTHON_BIN" - "$HTTP_PROXY_HOST" "$HTTP_PROXY_PORT" <<'PY'
+import socket
+import sys
+
+sock = socket.socket()
+sock.settimeout(0.3)
+try:
+    result = sock.connect_ex((sys.argv[1], int(sys.argv[2])))
+finally:
+    sock.close()
+raise SystemExit(0 if result == 0 else 1)
+PY
+}
+
+is_listening && exit 0
+
+lock_dir="$CODEX_SSH_EG_STATE_DIR/start.lock"
+if mkdir "$lock_dir" 2>/dev/null; then
+  trap 'rmdir "$lock_dir" 2>/dev/null || true' EXIT INT TERM
+  if ! is_listening; then
+    log_file="$CODEX_SSH_EG_STATE_DIR/proxy.log"
+    pid_file="$CODEX_SSH_EG_STATE_DIR/proxy.pid"
+    PYTHONPATH="$CODEX_SSH_EG_DATA_DIR" setsid -f "$PYTHON_BIN" \
+      -m codex_ssh_eg.proxy \
+      --listen-host "$HTTP_PROXY_HOST" \
+      --listen-port "$HTTP_PROXY_PORT" \
+      --socks-host "$SOCKS_HOST" \
+      --socks-port "$SOCKS_PORT" \
+      </dev/null >>"$log_file" 2>&1
+
+    for _ in 1 2 3 4 5; do
+      pid="$(pgrep -n -u "$USER" -f 'python.*-m codex_ssh_eg\.proxy' || true)"
+      if [ -n "$pid" ]; then
+        printf '%s\n' "$pid" >"$pid_file"
+      fi
+      is_listening && exit 0
+      sleep 1
+    done
+    echo "HTTP adapter failed to start; inspect $log_file" >&2
+    exit 1
+  fi
+else
+  for _ in 1 2 3 4 5; do
+    is_listening && exit 0
+    sleep 1
+  done
+  echo "Timed out waiting for another adapter launcher." >&2
+  exit 1
+fi
